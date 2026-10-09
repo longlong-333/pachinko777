@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>日式柏青哥 (中獎音樂升級版)</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #111; color: white; padding: 20px; }
+        .cabinet { background-color: #33145a; width: 340px; margin: 20px auto; padding: 20px; border-radius: 15px; border: 3px solid #ffd700; box-shadow: 0 0 20px #6441a5; }
+        .screen { background-color: #001f3f; padding: 15px; margin: 15px 0; border-radius: 8px; border: 2px solid #0074d9; }
+        .slot-box { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .reel { font-size: 50px; font-weight: bold; width: 60px; height: 70px; line-height: 70px; background: white; color: black; border-radius: 8px; }
+        .msg { font-size: 20px; color: #ff0055; min-height: 25px; font-weight: bold; }
+        .btn { font-size: 16px; padding: 10px 15px; margin: 5px; font-weight: bold; cursor: pointer; border-radius: 5px; border: none; }
+        .btn-manual { background-color: #2196F3; color: white; }
+        .btn-auto { background-color: #4CAF50; color: white; }
+        .btn-stop { background-color: #f44336; color: white; }
+        .btn-reward { background-color: #ffd700; color: black; width: 90%; font-size: 18px; display: none; box-shadow: 0 0 10px #ffd700; }
+    </style>
+</head>
+<body>
+
+    <h1>🎰 柏青哥抽獎機 (中獎音樂升級版)</h1>
+    <p style="color: #00ffcc; font-size: 14px;">💡 提示：抽中大獎時會播放全新編寫的輕快電子樂！</p>
+    
+    <div class="cabinet">
+        <div>
+            機率：
+            <select id="prob-select">
+                <option value="5">1 / 5 (作弊測試)</option>
+                <option value="99">1 / 99 (高勝率)</option>
+                <option value="319" selected>1 / 319 (標準)</option>
+            </select>
+        </div>
+
+        <p>🔮 鋼珠：<span id="ball-txt" style="color:#ffd700; font-weight:bold;">500</span> 顆</p>
+        <p>🎰 轉數：<span id="spin-txt" style="color:#ffd700; font-weight:bold;">0</span></p>
+
+        <div class="screen">
+            <div class="slot-box">
+                <div id="r1" class="reel">7</div>
+                <div id="r2" class="reel">7</div>
+                <div id="r3" class="reel">7</div>
+            </div>
+            <div id="status-txt" class="msg">請點擊下方按鈕開始</div>
+        </div>
+
+        <button id="reward-btn" class="btn btn-reward" onclick="collectReward()">🎁 點擊領取 +150 顆鋼珠！</button>
+        
+        <div id="normal-btns">
+            <button id="manual-btn" class="btn btn-manual" onclick="clickManual()">🔵 單發</button>
+            <button id="auto-btn" class="btn btn-auto" onclick="clickAuto()">🟢 連發</button>
+            <button id="stop-btn" class="btn btn-stop" onclick="clickStop()" disabled>🛑 停止</button>
+        </div>
+    </div>
+
+    <script>
+        var isSpinning = false;
+        var balls = 500;
+        var spins = 0;
+        var jackpotMode = false;
+        var jackpotRounds = 0;
+        var autoTimer = null;
+
+        var audioCtx = null;
+        var jackpotBgmTimer = null;
+
+        function playTone(freq, type, duration, vol) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                var osc = audioCtx.createOscillator();
+                var gain = audioCtx.createGain();
+                osc.type = type || 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol || 0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        // 🎵 核心修改：全新編寫的輕快、雀躍連音進行曲模組
+        function startHappyJackpotMusic() {
+            if (jackpotBgmTimer) clearInterval(jackpotBgmTimer);
+            
+            // 使用大調的高音階組件（多、咪、索、高音多、高音咪...），聽起來非常輕快歡樂
+            var happyNotes = [523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 523.25, 587.33, 698.46, 880.00, 1174.66, 880.00, 698.46, 587.33];
+            var idx = 0;
+            
+            // 速度拉快到 120 毫秒一個音，呈現非常雀躍跳動的派對曲風
+            jackpotBgmTimer = setInterval(function() {
+                playTone(happyNotes[idx], 'square', 0.10, 0.08); // 用 square 方波營造復古遊戲機風味
+                idx = (idx + 1) % happyNotes.length;
+            }, 120);
+        }
+
+        function stopJackpotMusic() {
+            if (jackpotBgmTimer) {
+                clearInterval(jackpotBgmTimer);
+                jackpotBgmTimer = null;
+            }
+        }
+
+        function clickManual() {
+            if (isSpinning || jackpotMode) return;
+            shoot();
+        }
+
+        function clickAuto() {
+            if (autoTimer || jackpotMode) return;
+            document.getElementById('auto-btn').disabled = true;
+            document.getElementById('manual-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = false;
+            shoot();
+            autoTimer = setInterval(function() {
+                if (!isSpinning) shoot();
+            }, 600);
+        }
+
+        function clickStop() {
+            stopJackpotMusic();
+            if (autoTimer) {
+                clearInterval(autoTimer);
+                autoTimer = null;
+            }
+            document.getElementById('auto-btn').disabled = false;
+            document.getElementById('manual-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = true;
+        }
+
+        function collectReward() {
+            balls += 150;
+            jackpotRounds--;
+            
+            // 每點一次領獎，會疊加一個高亢的叮咚聲
+            playTone(1318.51, 'sine', 0.15, 0.15); 
+            
+            document.getElementById('status-txt').innerText = "獲得 +150 顆珠！";
+            document.getElementById('reward-btn').innerText = "🎁 點擊領取！(剩餘 " + jackpotRounds + " 次)";
+            document.getElementById('ball-txt').innerText = balls;
+            
+            if (jackpotRounds <= 0) {
+                jackpotMode = false;
+                stopJackpotMusic(); // 領完獎勵，關閉輕快音樂
+                document.getElementById('reward-btn').style.display = "none";
+                document.getElementById('normal-btns').style.display = "block";
+                document.getElementById('status-txt').innerText = "大獎結束！";
+                clickStop();
+            }
+        }
+
+        function shoot() {
+            if (balls <= 0) {
+                clickStop();
+                alert("鋼珠沒了，自動補滿 500 顆！");
+                balls = 500;
+                document.getElementById('ball-txt').innerText = balls;
+                return;
+            }
+
+            // 發射音效
+            playTone(1500, 'sine', 0.03, 0.05);
+
+            balls--;
+            spins++;
+            isSpinning = true;
+            document.getElementById('ball-txt').innerText = balls;
+            document.getElementById('spin-txt').innerText = spins;
+            document.getElementById('status-txt').innerText = "抽獎中...";
+
+            var prob = parseInt(document.getElementById('prob-select').value);
+            var rand = Math.floor(Math.random() * prob) + 1;
+            var isWin = (rand === 1);
+
+            var n1, n2, n3;
+            if (isWin) {
+                n1 = n2 = n3 = Math.floor(Math.random() * 9) + 1;
+            } else {
+                n1 = Math.floor(Math.random() * 9) + 1;
+                n2 = Math.floor(Math.random() * 9) + 1;
+                n3 = Math.floor(Math.random() * 9) + 1;
+                if (n1 === n2 && n2 === n3) n3 = (n3 % 9) + 1;
+            }
+
+            var runCount = 0;
+            var anim = setInterval(function() {
+                document.getElementById('r1').innerText = Math.floor(Math.random() * 9) + 1;
+                document.getElementById('r2').innerText = Math.floor(Math.random() * 9) + 1;
+                document.getElementById('r3').innerText = Math.floor(Math.random() * 9) + 1;
+                
+                // 轉動時的答答答音效
+                playTone(600 + (runCount * 40), 'sine', 0.02, 0.02);
+                runCount++;
+
+                if (runCount > 10) {
+                    clearInterval(anim);
+                    document.getElementById('r1').innerText = n1;
+                    document.getElementById('r2').innerText = n2;
+                    document.getElementById('r3').innerText = n3;
+                    isSpinning = false;
+
+                    if (isWin) {
+                        clickStop();
+                        jackpotMode = true;
+                        jackpotRounds = 10;
+                        
+                        // 🚀 觸發全新的輕快旋律大腦
+                        startHappyJackpotMusic();
+                        
+                        document.getElementById('status-txt').innerText = "🎉 大當り (JACKPOT)!!!";
+                        document.getElementById('normal-btns').style.display = "none";
+                        document.getElementById('reward-btn').style.display = "block";
+                        document.getElementById('reward-btn').innerText = "🎁 點擊領取！(剩餘 10 次)";
+                    } else {
+                        // 沒中獎的短促音
+                        playTone(220, 'sawtooth', 0.08, 0.03);
+                        document.getElementById('status-txt').innerText = "❌ 沒中獎。";
+                    }
+                }
+            }, 80);
+        }
+    </script>
+</body>
+</html>
